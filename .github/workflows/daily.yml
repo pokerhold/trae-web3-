@@ -35,8 +35,6 @@ jobs:
       - name: Email channel health check (manual dispatch only)
         if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
           EMAIL_SMTP_HOST: ${{ secrets.EMAIL_SMTP_HOST }}
           EMAIL_SMTP_PORT: ${{ secrets.EMAIL_SMTP_PORT }}
           EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
@@ -44,13 +42,12 @@ jobs:
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           EMAIL_USE_SSL: ${{ secrets.EMAIL_USE_SSL }}
           EMAIL_ENABLED: "true"
+          PYTHONPATH: ${{ github.workspace }}
         run: |
-          python -m src.main --email-check
+          python src/main.py --email-check
 
       - name: Run daily report
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
           EMAIL_SMTP_HOST: ${{ secrets.EMAIL_SMTP_HOST }}
           EMAIL_SMTP_PORT: ${{ secrets.EMAIL_SMTP_PORT }}
           EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
@@ -60,5 +57,6 @@ jobs:
           EMAIL_ENABLED: "true"
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
-          python -m src.main
+          python src/main.py
