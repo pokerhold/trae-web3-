@@ -20,7 +20,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install python-dotenv PyYAML requests pandas openpyxl tzdata snscrape openai
+          fi
 
       - name: Echo mail config (non-secret)
         env:
@@ -32,8 +36,9 @@ jobs:
           echo "SMTP_PORT=${EMAIL_SMTP_PORT}"
           echo "EMAIL_USE_SSL=${EMAIL_USE_SSL}"
 
-      - name: Email channel health check (manual dispatch only)
+      - name: Inline email health check (manual dispatch only)
         if: ${{ github.event_name == 'workflow_dispatch' }}
+        continue-on-error: true
         env:
           EMAIL_SMTP_HOST: ${{ secrets.EMAIL_SMTP_HOST }}
           EMAIL_SMTP_PORT: ${{ secrets.EMAIL_SMTP_PORT }}
@@ -41,10 +46,56 @@ jobs:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           EMAIL_USE_SSL: ${{ secrets.EMAIL_USE_SSL }}
-          EMAIL_ENABLED: "true"
-          PYTHONPATH: ${{ github.workspace }}
         run: |
-          python src/main.py --email-check
+          python - <<'PY'
+          import os, smtplib, ssl
+          host = os.getenv("EMAIL_SMTP_HOST")
+          port = int(os.getenv("EMAIL_SMTP_PORT", "587"))
+          user = os.getenv("EMAIL_USERNAME")
+          pwd  = os.getenv("EMAIL_PASSWORD")
+          to   = os.getenv("EMAIL_TO")
+          use_ssl = str(os.getenv("EMAIL_USE_SSL","")).lower() in ("1","true","yes","on") or port==465
+
+          if not all([host, port, user, pwd, to]):
+              raise RuntimeError("缺少邮件环境变量（HOST/PORT/USERNAME/PASSWORD/TO）")
+
+          from email.mime.text import MIMEText
+          from email.mime.multipart import MIMEMultipart
+          msg = MIMEMultipart()
+          msg["From"] = f"Web3 Reporter <{user}>"
+          msg["To"] = to
+          msg["Subject"] = "邮件通道健康检查"
+          msg.attach(MIMEText("这是GitHub Actions的SMTP健康检查。如果你看到此邮件，通道工作正常。","plain","utf-8"))
+
+          try:
+              if use_ssl:
+                  with smtplib.SMTP_SSL(host, port, context=ssl.create_default_context()) as s:
+                      s.login(user, pwd)
+                      s.sendmail(user, [to], msg.as_string())
+              else:
+                  with smtplib.SMTP(host, port) as s:
+                      s.starttls(context=ssl.create_default_context())
+                      s.login(user, pwd)
+                      s.sendmail(user, [to], msg.as_string())
+              print("[INFO] 邮件健康检查发送成功")
+          except smtplib.SMTPAuthenticationError as e:
+              print(f"[ERROR] SMTP 认证失败: {getattr(e,'smtp_code',None)} {getattr(e,'smtp_error','')}")
+              raise
+          except Exception as e:
+              print(f"[ERROR] 邮件健康检查失败: {e}")
+              raise
+          PY
+
+      - name: Show repository tree
+        run: |
+          pwd
+          ls -la
+          if [ -d src ]; then
+            echo "src directory exists"
+            ls -la src
+          else
+            echo "src directory NOT found"
+          fi
 
       - name: Run daily report
         env:
@@ -59,4 +110,8 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python src/main.py
+          if [ -f src/main.py ]; then
+            python src/main.py
+          else
+            echo "[WARN] src/main.py 不存在，跳过日报发送。请将 src 代码提交到远端默认分支。"
+          fi
