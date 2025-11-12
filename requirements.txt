@@ -1,0 +1,8 @@
+snscrape==0.7.0.20230622
+openai>=2.7.2
+python-dotenv>=1.2.1
+PyYAML>=6.0.2
+requests>=2.32.3
+pandas>=2.3.3
+openpyxl>=3.1.5
+tzdata>=2025.2
