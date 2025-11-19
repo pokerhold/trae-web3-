@@ -26,14 +26,18 @@ jobs:
 
       - name: Run Report Generator
         env:
-          # 必须映射 Secrets 才能发邮件
+          # 邮件发送配置
           EMAIL_SMTP_HOST: ${{ secrets.EMAIL_SMTP_HOST }}
           EMAIL_SMTP_PORT: ${{ secrets.EMAIL_SMTP_PORT }}
           EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           EMAIL_USE_SSL: ${{ secrets.EMAIL_USE_SSL }}
-          # 解决路径问题
+          
+          # 新增：CryptoPanic 舆情 API Key
+          CRYPTOPANIC_API_KEY: ${{ secrets.CRYPTOPANIC_API_KEY }}
+          
+          # 解决 Python 模块路径问题
           PYTHONPATH: .
         run: |
           python -m src.main
