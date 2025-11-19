@@ -8,7 +8,6 @@ from src.fetch import fetch_hot_tweets
 from src.summarize import summarize, summarize_structured
 from src.export_excel import export_structured_to_excel
 from src.senders.email_sender import send_email
-from src.senders.telegram_sender import send_telegram, send_telegram_document
 from src.providers.rootdata import RootDataClient
 
 
@@ -200,23 +199,7 @@ def run_once(tweets_file: Optional[str] = None):
                 except Exception as te:
                     print(f"[WARN] Telegram 备援通知发送失败: {te}")
 
-    # Telegram
-    tg_cfg = delivery.get("telegram", {})
-    if tg_cfg.get("enabled"):
-        try:
-            send_telegram(body=report, env=env)
-            print("[INFO] Telegram 发送成功")
-            # 发送 Excel 文件
-            try:
-                send_telegram_document(file_path=str(out_file), env=env, caption="Web3 每日报告（Excel）")
-                print("[INFO] Telegram 文档发送成功")
-            except Exception as e:
-                print(f"[WARN] Telegram 文档发送失败: {e}")
-        except Exception as e:
-            print(f"[ERROR] Telegram 发送失败: {e}")
-
-
-if __name__ == "__main__":
+    if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Web3 日报生成器")
     parser.add_argument("--tweets-file", type=str, default=None, help="本地 snscrape 导出的 JSONL 推文文件路径")
     parser.add_argument("--email-check", action="store_true", help="仅进行邮件通道健康检查，不生成报告")
