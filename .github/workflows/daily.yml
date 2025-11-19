@@ -111,7 +111,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           if [ -f src/main.py ]; then
-            python src/main.py
+            python -m src.main
           else
             echo "[WARN] src/main.py 不存在，跳过日报发送。请将 src 代码提交到远端默认分支。"
           fi
