@@ -2,14 +2,14 @@ name: Web3 Daily Report
 
 on:
   schedule:
-    - cron: "0 1 * * *"  # 每日 01:00 UTC（北京时间 09:00）
-  workflow_dispatch: {}
+    - cron: "0 1 * * *"  # 每天 UTC 01:00 (北京时间 09:00)
+  workflow_dispatch: {}  # 允许手动触发
 
 jobs:
-  run-daily:
+  run-report:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -22,104 +22,18 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
-          else
-            pip install python-dotenv PyYAML requests pandas openpyxl tzdata snscrape openai
           fi
 
-      - name: Echo mail config (non-secret)
+      - name: Run Report Generator
         env:
-          EMAIL_SMTP_HOST: ${{ secrets.EMAIL_SMTP_HOST }}
-          EMAIL_SMTP_PORT: ${{ secrets.EMAIL_SMTP_PORT }}
-          EMAIL_USE_SSL: ${{ secrets.EMAIL_USE_SSL }}
-        run: |
-          echo "SMTP_HOST=${EMAIL_SMTP_HOST}"
-          echo "SMTP_PORT=${EMAIL_SMTP_PORT}"
-          echo "EMAIL_USE_SSL=${EMAIL_USE_SSL}"
-
-      - name: Inline email health check (manual dispatch only)
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        continue-on-error: true
-        env:
+          # 必须映射 Secrets 才能发邮件
           EMAIL_SMTP_HOST: ${{ secrets.EMAIL_SMTP_HOST }}
           EMAIL_SMTP_PORT: ${{ secrets.EMAIL_SMTP_PORT }}
           EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           EMAIL_USE_SSL: ${{ secrets.EMAIL_USE_SSL }}
-        run: |
-          python - <<'PY'
-          import os, smtplib, ssl
-          host = os.getenv("EMAIL_SMTP_HOST")
-          port_str = os.getenv("EMAIL_SMTP_PORT", "587")
-          # 修复：防止端口为空字符串导致报错
-          port = int(port_str) if port_str else 587
-          
-          user = os.getenv("EMAIL_USERNAME")
-          pwd  = os.getenv("EMAIL_PASSWORD")
-          to   = os.getenv("EMAIL_TO")
-          use_ssl = str(os.getenv("EMAIL_USE_SSL","")).lower() in ("1","true","yes","on") or port==465
-
-          if not all([host, user, pwd, to]):
-              print(f"Host: {host}, User: {user}, To: {to}")
-              raise RuntimeError("缺少邮件环境变量（HOST/USERNAME/PASSWORD/TO）")
-
-          from email.mime.text import MIMEText
-          from email.mime.multipart import MIMEMultipart
-          msg = MIMEMultipart()
-          msg["From"] = f"Web3 Reporter <{user}>"
-          msg["To"] = to
-          msg["Subject"] = "邮件通道健康检查"
-          msg.attach(MIMEText("这是GitHub Actions的SMTP健康检查。如果你看到此邮件，通道工作正常。","plain","utf-8"))
-
-          try:
-              if use_ssl:
-                  with smtplib.SMTP_SSL(host, port, context=ssl.create_default_context()) as s:
-                      s.login(user, pwd)
-                      s.sendmail(user, [to], msg.as_string())
-              else:
-                  with smtplib.SMTP(host, port) as s:
-                      s.starttls(context=ssl.create_default_context())
-                      s.login(user, pwd)
-                      s.sendmail(user, [to], msg.as_string())
-              print("[INFO] 邮件健康检查发送成功")
-          except smtplib.SMTPAuthenticationError as e:
-              print(f"[ERROR] SMTP 认证失败: {getattr(e,'smtp_code',None)} {getattr(e,'smtp_error','')}")
-              raise
-          except Exception as e:
-              print(f"[ERROR] 邮件健康检查失败: {e}")
-              raise
-          PY
-
-      - name: Show repository tree
-        run: |
-          pwd
-          ls -la
-          if [ -d src ]; then
-            echo "src directory exists"
-            ls -la src
-          else
-            echo "src directory NOT found"
-          fi
-
-      - name: Run daily report
-        env:
-          # [修复] 显式映射所有 Secrets
-          EMAIL_SMTP_HOST: ${{ secrets.EMAIL_SMTP_HOST }}
-          EMAIL_SMTP_PORT: ${{ secrets.EMAIL_SMTP_PORT }}
-          EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
-          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-          EMAIL_TO: ${{ secrets.EMAIL_TO }}
-          EMAIL_USE_SSL: ${{ secrets.EMAIL_USE_SSL }}
-          EMAIL_ENABLED: "true"
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          # [关键修复] 将当前目录加入 Python 路径，解决 ModuleNotFoundError
+          # 解决路径问题
           PYTHONPATH: .
         run: |
-          if [ -f src/main.py ]; then
-            # [关键修复] 使用模块化方式运行
-            python -m src.main
-          else
-            echo "[ERROR] src/main.py 不存在，请检查代码是否已提交。"
-            exit 1
-          fi
+          python -m src.main
