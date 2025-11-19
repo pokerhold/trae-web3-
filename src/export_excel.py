@@ -1,40 +1,31 @@
-from pathlib import Path
-from typing import Dict, List
 import pandas as pd
+import os
+from datetime import datetime
 
+def save_to_excel(data_map: dict, output_dir: str = "output") -> str:
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    file_name = f"Web3_Daily_Report_{date_str}.xlsx"
+    file_path = os.path.join(output_dir, file_name)
 
-def _to_df(items: List[dict], columns: List[str]) -> pd.DataFrame:
-    if not items:
-        return pd.DataFrame(columns=columns)
-    # 只保留需要的列并按列顺序输出
-    rows = []
-    for it in items:
-        row = {col: it.get(col, "") for col in columns}
-        rows.append(row)
-    return pd.DataFrame(rows, columns=columns)
-
-
-def export_structured_to_excel(structured: Dict, out_path: Path) -> Path:
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # 定义各模块的列
-    financing_cols = ["project_name", "amount", "round", "sector", "date", "sources"]
-    airdrop_cols = ["project_name", "signal", "task_url", "tge_date", "notes"]
-    eco_cols = ["chain", "change_type", "description", "metrics", "source"]
-    token_cols = ["project_name", "token", "change", "unlock_date", "amount", "impact", "source"]
-    action_cols = ["title", "action", "reason", "urgency_score", "due_hint"]
-
-    financing = structured.get("financing", [])
-    airdrops = structured.get("airdrops", [])
-    ecosystems = structured.get("ecosystems", [])
-    tokenomics = structured.get("tokenomics", [])
-    actions = structured.get("actions", [])
-
-    with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
-        _to_df(financing, financing_cols).to_excel(writer, sheet_name="融资项目", index=False)
-        _to_df(airdrops, airdrop_cols).to_excel(writer, sheet_name="潜在空投", index=False)
-        _to_df(ecosystems, eco_cols).to_excel(writer, sheet_name="核心链生态", index=False)
-        _to_df(tokenomics, token_cols).to_excel(writer, sheet_name="代币经济", index=False)
-        _to_df(actions, action_cols).to_excel(writer, sheet_name="操作清单", index=False)
-
-    return out_path
+    try:
+        with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
+            has_data = False
+            for sheet_name, data_list in data_map.items():
+                if not data_list:
+                    pd.DataFrame({"Info": ["暂无数据"]}).to_excel(writer, sheet_name=sheet_name, index=False)
+                else:
+                    df = pd.DataFrame(data_list)
+                    df.to_excel(writer, sheet_name=sheet_name, index=False)
+                    has_data = True
+            
+            if not has_data:
+                pd.DataFrame({"Status": ["今日无数据"]}).to_excel(writer, sheet_name="Summary", index=False)
+                
+        print(f"[INFO] Excel 已生成: {file_path}")
+        return file_path
+    except Exception as e:
+        print(f"[ERROR] Excel 生成失败: {e}")
+        return None
