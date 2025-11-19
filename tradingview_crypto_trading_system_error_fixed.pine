@@ -1,0 +1,371 @@
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// 加密货币交易箭头系统 - 完整版
+// Crypto Trading Arrow System - Complete Version
+// ═══════════════════════════════════════════════════════════════════════════════════════
+//@version=6
+indicator("加密货币交易箭头系统 - 完整版", overlay=true, max_labels=500, max_lines=200)
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// 输入参数设置
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+// 摆动点检测设置
+lookback = input.int(10, "摆动点检测周期", minval=1, maxval=50, group="摆动检测")
+use_dynamic_lookback = input.bool(true, "使用动态周期", tooltip="根据市场波动性自动调整检测周期", group="摆动检测")
+min_swing_strength = input.float(1.0, "最小摆动强度", minval=0.1, maxval=10.0, step=0.1, group="摆动检测")
+
+// 成交量确认设置
+use_volume_confirmation = input.bool(true, "启用成交量确认", group="成交量")
+volume_ma_period = input.int(20, "成交量均线周期", minval=5, maxval=100, group="成交量")
+volume_multiplier = input.float(1.5, "成交量倍数", minval=1.0, maxval=5.0, step=0.1, group="成交量")
+
+// 箭头显示设置
+show_arrows = input.bool(true, "显示箭头", group="显示设置")
+arrow_size = input.string("small", "箭头大小", options=["tiny", "small", "normal", "large"], group="显示设置")
+arrow_offset = input.int(3, "箭头偏移", minval=0, maxval=10, group="显示设置")
+show_prices = input.bool(true, "显示价格", group="显示设置")
+price_decimals = input.int(2, "价格小数位", minval=0, maxval=8, group="显示设置")
+
+// 颜色设置
+bullish_color = input.color(color.green, "看涨颜色", group="颜色设置")
+bearish_color = input.color(color.red, "看跌颜色", group="颜色设置")
+reference_color = input.color(color.teal, "参考线颜色", group="颜色设置")
+background_color = input.color(color.new(color.black, 80), "背景颜色", group="颜色设置")
+arrow_transparency = input.int(20, "箭头透明度", minval=0, maxval=100, group="颜色设置")
+
+// 交易信号设置
+signal_sensitivity = input.string("medium", "信号敏感度", options=["low", "medium", "high"], group="交易信号")
+risk_reward_ratio = input.float(2.0, "风险回报比", minval=1.0, maxval=10.0, step=0.1, group="交易信号")
+show_entry_points = input.bool(true, "显示入场点", group="交易信号")
+show_stop_loss = input.bool(true, "显示止损位", group="交易信号")
+show_take_profit = input.bool(true, "显示止盈位", group="交易信号")
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// 核心计算逻辑
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+// 动态周期计算
+atr = ta.atr(14)
+volatility = atr / close * 100
+final_lookback = use_dynamic_lookback ? math.round(lookback * (1 + volatility / 100)) : lookback
+final_lookback := math.max(3, math.min(50, final_lookback))
+
+// 摆动点检测
+swing_high = ta.pivothigh(high, final_lookback, final_lookback)
+swing_low = ta.pivotlow(low, final_lookback, final_lookback)
+
+// 成交量确认
+volume_ma = ta.sma(volume, volume_ma_period)
+volume_confirmation = volume > volume_ma * volume_multiplier
+
+// 摆动强度计算
+lowest_price = ta.lowest(low, final_lookback)
+swing_high_strength = swing_high ? ((high[final_lookback] - lowest_price) / ta.tr) * 100 : 0
+highest_price = ta.highest(high, final_lookback)
+swing_low_strength = swing_low ? ((highest_price - low[final_lookback]) / ta.tr) * 100 : 0
+
+// 有效摆动点（带成交量确认）
+valid_swing_high = not na(swing_high) and (not use_volume_confirmation or volume_confirmation[final_lookback])
+valid_swing_low = not na(swing_low) and (not use_volume_confirmation or volume_confirmation[final_lookback])
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// 交易信号逻辑
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+// 信号敏感度设置
+signal_threshold = switch signal_sensitivity
+    "low" => 1.5
+    "medium" => 1.0
+    "high" => 0.5
+    => 1.0
+
+// 交易信号生成
+var bool long_signal = false
+var bool short_signal = false
+var float entry_price = 0.0
+var float stop_loss_price = 0.0
+var float take_profit_price = 0.0
+
+// 生成交易信号
+if valid_swing_low and swing_low_strength >= min_swing_strength * signal_threshold
+    long_signal := true
+    short_signal := false
+    entry_price := close
+    stop_loss_price := low[final_lookback] - atr * 0.5
+    take_profit_price := close + (close - stop_loss_price) * risk_reward_ratio
+
+if valid_swing_high and swing_high_strength >= min_swing_strength * signal_threshold
+    short_signal := true
+    long_signal := false
+    entry_price := close
+    stop_loss_price := high[final_lookback] + atr * 0.5
+    take_profit_price := close - (stop_loss_price - close) * risk_reward_ratio
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// 箭头管理系统
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+var label[] high_labels = array.new_label()
+var label[] low_labels = array.new_label()
+var line[] support_lines = array.new_line()
+var line[] resistance_lines = array.new_line()
+
+// 清除旧标签和线条
+if barstate.islast
+    for i = 0 to array.size(high_labels) - 1
+        label.delete(array.get(high_labels, i))
+    for i = 0 to array.size(low_labels) - 1
+        label.delete(array.get(low_labels, i))
+    for i = 0 to array.size(support_lines) - 1
+        line.delete(array.get(support_lines, i))
+    for i = 0 to array.size(resistance_lines) - 1
+        line.delete(array.get(resistance_lines, i))
+    
+    array.clear(high_labels)
+    array.clear(low_labels)
+    array.clear(support_lines)
+    array.clear(resistance_lines)
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// 绘制摆动点箭头
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+// 绘制摆动高点
+if valid_swing_high and show_arrows
+    target_index = bar_index[final_lookback]
+    target_price = high[final_lookback]
+    label_y = target_price + atr * arrow_offset * 0.1
+    
+    // 创建箭头文本
+    display_text = show_prices ? "▼\n" + str.tostring(target_price, "#.#") + "\n" + str.tostring(swing_high_strength, "#.##") + "%" : "▼"
+    
+    // 设置颜色和透明度
+    label_color = color.new(bearish_color, arrow_transparency)
+    text_color = color.new(color.white, arrow_transparency)
+    
+    lbl = label.new(
+        target_index,
+        label_y,
+        display_text,
+        color=label_color,
+        textcolor=text_color,
+        style=label.style_label_down,
+        size=arrow_size == "tiny" ? size.tiny : arrow_size == "small" ? size.small : arrow_size == "normal" ? size.normal : size.large
+    )
+    
+    array.push(high_labels, lbl)
+    
+    // 创建阻力线
+    if show_entry_points
+        res_line = line.new(
+            target_index,
+            target_price,
+            bar_index,
+            target_price,
+            color=reference_color,
+            style=line.style_dashed,
+            width=1
+        )
+        array.push(resistance_lines, res_line)
+
+// 绘制摆动低点
+if valid_swing_low and show_arrows
+    target_index = bar_index[final_lookback]
+    target_price = low[final_lookback]
+    label_y = target_price - atr * arrow_offset * 0.1
+    
+    // 创建箭头文本
+    display_text = show_prices ? "▲\n" + str.tostring(target_price, "#.#") + "\n" + str.tostring(swing_low_strength, "#.##") + "%" : "▲"
+    
+    // 设置颜色和透明度
+    label_color = color.new(bullish_color, arrow_transparency)
+    text_color = color.new(color.white, arrow_transparency)
+    
+    lbl = label.new(
+        target_index,
+        label_y,
+        display_text,
+        color=label_color,
+        textcolor=text_color,
+        style=label.style_label_up,
+        size=arrow_size == "tiny" ? size.tiny : arrow_size == "small" ? size.small : arrow_size == "normal" ? size.normal : size.large
+    )
+    
+    array.push(low_labels, lbl)
+    
+    // 创建支撑线
+    if show_entry_points
+        sup_line = line.new(
+            target_index,
+            target_price,
+            bar_index,
+            target_price,
+            color=reference_color,
+            style=line.style_dashed,
+            width=1
+        )
+        array.push(support_lines, sup_line)
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// 绘制交易信号
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+// 多头信号
+if long_signal and show_entry_points
+    entry_label = label.new(
+        bar_index,
+        low - atr * 0.5,
+        "买入信号\n入场: " + str.tostring(entry_price, "#.#") + "\n止损: " + str.tostring(stop_loss_price, "#.#") + "\n止盈: " + str.tostring(take_profit_price, "#.#"),
+        color=color.new(color.green, 0),
+        textcolor=color.white,
+        style=label.style_label_up,
+        size=size.small
+    )
+    
+    if show_stop_loss
+        stop_line = line.new(
+            bar_index,
+            stop_loss_price,
+            bar_index + 20,
+            stop_loss_price,
+            color=color.red,
+            style=line.style_dashed,
+            width=2
+        )
+    
+    if show_take_profit
+        tp_line = line.new(
+            bar_index,
+            take_profit_price,
+            bar_index + 20,
+            take_profit_price,
+            color=color.green,
+            style=line.style_dashed,
+            width=2
+        )
+
+// 空头信号
+if short_signal and show_entry_points
+    entry_label = label.new(
+        bar_index,
+        high + atr * 0.5,
+        "卖出信号\n入场: " + str.tostring(entry_price, "#.#") + "\n止损: " + str.tostring(stop_loss_price, "#.#") + "\n止盈: " + str.tostring(take_profit_price, "#.#"),
+        color=color.new(color.red, 0),
+        textcolor=color.white,
+        style=label.style_label_down,
+        size=size.small
+    )
+    
+    if show_stop_loss
+        stop_line = line.new(
+            bar_index,
+            stop_loss_price,
+            bar_index + 20,
+            stop_loss_price,
+            color=color.red,
+            style=line.style_dashed,
+            width=2
+        )
+    
+    if show_take_profit
+        tp_line = line.new(
+            bar_index,
+            take_profit_price,
+            bar_index + 20,
+            take_profit_price,
+            color=color.green,
+            style=line.style_dashed,
+            width=2
+        )
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// 背景颜色和参考线
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+// 设置背景颜色
+bgcolor(background_color)
+
+// 绘制参考线
+var line ref_line = na
+var label ref_label = na
+
+if barstate.islast
+    // 删除旧的参考线和标签
+    if not na(ref_line)
+        line.delete(ref_line)
+    if not na(ref_label)
+        label.delete(ref_label)
+    
+    // 创建新的参考线（当前价格）
+    ref_line := line.new(
+        bar_index - 50,
+        close,
+        bar_index,
+        close,
+        color=reference_color,
+        style=line.style_solid,
+        width=2
+    )
+    
+    // 创建价格标签
+    ref_label := label.new(
+        bar_index,
+        close,
+        "当前价格: " + str.tostring(close, "#.#"),
+        color=color.new(reference_color, 50),
+        textcolor=color.white,
+        style=label.style_label_left,
+        size=size.small
+    )
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// 信息显示面板
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+// 创建信息面板
+var label info_panel = na
+
+if barstate.islast
+    // 删除旧的信息面板
+    if not na(info_panel)
+        label.delete(info_panel)
+    
+    // 计算统计信息
+    total_signals = ta.cum(valid_swing_high or valid_swing_low)
+    bullish_signals = ta.cum(valid_swing_low)
+    bearish_signals = ta.cum(valid_swing_high)
+    
+    // 创建信息文本
+    info_text = "摆动点统计\n" +
+                "总信号: " + str.tostring(total_signals) + "\n" +
+                "看涨信号: " + str.tostring(bullish_signals) + "\n" +
+                "看跌信号: " + str.tostring(bearish_signals) + "\n" +
+                "当前波动率: " + str.tostring(volatility, "#.##") + "%"
+    
+    // 创建信息面板
+    info_panel := label.new(
+        bar_index - 10,
+        high + atr * 2,
+        info_text,
+        color=color.new(color.blue, 70),
+        textcolor=color.white,
+        style=label.style_label_down,
+        size=size.small
+    )
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// 警报设置
+// ═══════════════════════════════════════════════════════════════════════════════════════
+
+// 设置警报条件
+alertcondition(valid_swing_high, title="看跌摆动点", message="检测到看跌摆动点 - 价格: {{plot_0}}")
+alertcondition(valid_swing_low, title="看涨摆动点", message="检测到看涨摆动点 - 价格: {{plot_1}}")
+alertcondition(long_signal, title="买入信号", message="生成买入信号 - 入场价: {{plot_2}}")
+alertcondition(short_signal, title="卖出信号", message="生成卖出信号 - 入场价: {{plot_3}}")
+
+// 绘制信号强度（用于显示）
+plot(swing_high_strength, "高点强度", color=color.new(bearish_color, 70), display=display.none)
+plot(swing_low_strength, "低点强度", color=color.new(bullish_color, 70), display=display.none)
+plot(entry_price, "入场价格", color=color.new(color.blue, 50), display=display.none)
+plot(stop_loss_price, "止损价格", color=color.new(color.red, 50), display=display.none)
+plot(take_profit_price, "止盈价格", color=color.new(color.green, 50), display=display.none)
