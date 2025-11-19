@@ -200,23 +200,23 @@ def run_once(tweets_file: Optional[str] = None):
                     print(f"[WARN] Telegram 备援通知发送失败: {te}")
 
     if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Web3 日报生成器")
-    parser.add_argument("--tweets-file", type=str, default=None, help="本地 snscrape 导出的 JSONL 推文文件路径")
-    parser.add_argument("--email-check", action="store_true", help="仅进行邮件通道健康检查，不生成报告")
-    args = parser.parse_args()
-    try:
-        if args.email_check:
-            cfg = load_config()
-            env = cfg.get("env", {})
-            delivery = cfg.get("delivery", {})
-            email_cfg = delivery.get("email", {})
-            subject = email_cfg.get("subject", "邮件通道健康检查")
-            from_name = email_cfg.get("from_name", "Web3 Reporter")
-            body = "这是一封邮件通道健康检查消息。如果您收到此邮件，说明SMTP配置有效。"
-            send_email(subject=subject, body=body, env=env, from_name=from_name, attachments=None)
-            print("[INFO] 邮件健康检查发送成功")
-        else:
-            run_once(tweets_file=args.tweets_file)
-    except Exception as e:
-        print(f"[FATAL] 执行失败: {e}")
-        sys.exit(1)
+        parser = argparse.ArgumentParser(description="Web3 日报生成器")
+        parser.add_argument("--tweets-file", type=str, default=None, help="本地 snscrape 导出的 JSONL 推文文件路径")
+        parser.add_argument("--email-check", action="store_true", help="仅进行邮件通道健康检查，不生成报告")
+        args = parser.parse_args()
+        try:
+            if args.email_check:
+                cfg = load_config()
+                env = cfg.get("env", {})
+                delivery = cfg.get("delivery", {})
+                email_cfg = delivery.get("email", {})
+                subject = email_cfg.get("subject", "邮件通道健康检查")
+                from_name = email_cfg.get("from_name", "Web3 Reporter")
+                body = "这是一封邮件通道健康检查消息。如果您收到此邮件，说明SMTP配置有效。"
+                send_email(subject=subject, body=body, env=env, from_name=from_name, attachments=None)
+                print("[INFO] 邮件健康检查发送成功")
+            else:
+                run_once(tweets_file=args.tweets_file)
+        except Exception as e:
+            print(f"[FATAL] 执行失败: {e}")
+            sys.exit(1)
