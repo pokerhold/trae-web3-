@@ -50,14 +50,18 @@ jobs:
           python - <<'PY'
           import os, smtplib, ssl
           host = os.getenv("EMAIL_SMTP_HOST")
-          port = int(os.getenv("EMAIL_SMTP_PORT", "587"))
+          port_str = os.getenv("EMAIL_SMTP_PORT", "587")
+          # 修复：防止端口为空字符串导致报错
+          port = int(port_str) if port_str else 587
+          
           user = os.getenv("EMAIL_USERNAME")
           pwd  = os.getenv("EMAIL_PASSWORD")
           to   = os.getenv("EMAIL_TO")
           use_ssl = str(os.getenv("EMAIL_USE_SSL","")).lower() in ("1","true","yes","on") or port==465
 
-          if not all([host, port, user, pwd, to]):
-              raise RuntimeError("缺少邮件环境变量（HOST/PORT/USERNAME/PASSWORD/TO）")
+          if not all([host, user, pwd, to]):
+              print(f"Host: {host}, User: {user}, To: {to}")
+              raise RuntimeError("缺少邮件环境变量（HOST/USERNAME/PASSWORD/TO）")
 
           from email.mime.text import MIMEText
           from email.mime.multipart import MIMEMultipart
@@ -99,6 +103,7 @@ jobs:
 
       - name: Run daily report
         env:
+          # [修复] 显式映射所有 Secrets
           EMAIL_SMTP_HOST: ${{ secrets.EMAIL_SMTP_HOST }}
           EMAIL_SMTP_PORT: ${{ secrets.EMAIL_SMTP_PORT }}
           EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
@@ -108,10 +113,13 @@ jobs:
           EMAIL_ENABLED: "true"
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          PYTHONPATH: ${{ github.workspace }}
+          # [关键修复] 将当前目录加入 Python 路径，解决 ModuleNotFoundError
+          PYTHONPATH: .
         run: |
           if [ -f src/main.py ]; then
+            # [关键修复] 使用模块化方式运行
             python -m src.main
           else
-            echo "[WARN] src/main.py 不存在，跳过日报发送。请将 src 代码提交到远端默认分支。"
+            echo "[ERROR] src/main.py 不存在，请检查代码是否已提交。"
+            exit 1
           fi
