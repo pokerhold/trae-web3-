@@ -7,7 +7,7 @@ from src.providers.cryptopanic import CryptoPanicClient
 from src.senders.email_sender import send_email
 from src.summarize import generate_market_analysis
 
-# --- 👇 HTML 生成逻辑 (已优化市值显示) 👇 ---
+# --- 👇 HTML 生成逻辑 (已更新：市值单位 B) 👇 ---
 def save_to_html(data_map: dict, output_dir: str = "output") -> str:
     """直接在主程序中生成 HTML 报告"""
     if not os.path.exists(output_dir):
@@ -86,12 +86,12 @@ def save_to_html(data_map: dict, output_dir: str = "output") -> str:
                 for k, v in item.items():
                     val = str(v)
                     
-                    # [优化 1] 市值格式化 (Market Cap) -> 转为 M 单位
+                    # [优化] 市值格式化 (Market Cap) -> 转为 B 单位 (十亿)
                     if k == "market_cap":
                         try:
-                            # 除以 1,000,000 并保留 2 位小数
-                            val_m = float(v) / 1_000_000
-                            val = f"${val_m:,.2f}M"
+                            # 除以 1,000,000,000 (10亿) 并保留 2 位小数
+                            val_b = float(v) / 1_000_000_000
+                            val = f"${val_b:,.2f}B"
                         except:
                             val = str(v)
                     
@@ -135,11 +135,11 @@ def main():
     eco = rd.fetch_ecosystem()
     unl = rd.fetch_token_unlocks()
     
-    # 2. CoinGecko [优化 2] 抓取前 100 名
+    # 2. CoinGecko [配置] 抓取前 100 名
     cg = CoinGeckoClient()
     markets = cg.fetch_market_data(limit=100)
     
-    # 3. CryptoPanic [优化 3] 抓取前 50 条新闻
+    # 3. CryptoPanic [配置] 抓取前 50 条新闻
     cp_key = os.getenv("CRYPTOPANIC_API_KEY", "")
     cp = CryptoPanicClient(api_key=cp_key)
     news = cp.fetch_hot_news(limit=50)
