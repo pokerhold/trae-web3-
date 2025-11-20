@@ -1,24 +1,16 @@
 import requests
+import time
 from typing import List, Dict
 from deep_translator import GoogleTranslator
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 class CryptoPanicClient:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.base_url = "https://cryptopanic.com/api/v1"
-        # 初始化翻译器
         self.translator = GoogleTranslator(source='auto', target='zh-CN')
-        
-        # --- 新增：配置自动重试机制 ---
-        self.session = requests.Session()
-        retries = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
-        self.session.mount('https://', HTTPAdapter(max_retries=retries))
-        # ---------------------------
 
     def fetch_hot_news(self, limit: int = 20) -> List[Dict]:
-        """抓取并翻译当前最热的新闻"""
+        """抓取并翻译当前最热的新闻 (带手动重试机制)"""
         if not self.api_key:
             print("[WARN] CryptoPanic API Key 未配置")
             return []
@@ -30,23 +22,33 @@ class CryptoPanicClient:
             "filter": "hot",
             "kind": "news",
         }
-        
-        try:
-            # 修改：使用 session 发送请求，超时时间加长到 60 秒
-            r = self.session.get(url, params=params, timeout=60)
-            r.raise_for_status()
-            data = r.json()
-            results = data.get("results", [])
-            
-            processed = []
-            for item in results[:limit]:
-                processed.append(self._normalize(item))
-            return processed
-            
-        except Exception as e:
-            # 捕获所有异常，打印警告但不报错崩溃
-            print(f"[WARN] CryptoPanic 抓取失败 (已跳过): {e}")
-            return []
+
+        # --- 手动重试机制 (简单粗暴，绝对稳) ---
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # 设置 30秒 超时
+                r = requests.get(url, params=params, timeout=30)
+                r.raise_for_status()
+                
+                # 如果成功，直接处理数据并返回
+                data = r.json()
+                results = data.get("results", [])
+                
+                processed = []
+                for item in results[:limit]:
+                    processed.append(self._normalize(item))
+                return processed
+
+            except Exception as e:
+                print(f"[WARN] 第 {attempt + 1} 次尝试抓取失败: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(2) # 休息2秒再试
+                else:
+                    print("[ERROR] 重试 3 次仍失败，跳过舆情抓取。")
+                    return [] # 彻底失败，返回空列表，保证日报能发出去
+        # ------------------------------------
+        return []
 
     def _normalize(self, item: Dict) -> Dict:
         domain = item.get("domain", "unknown")
