@@ -7,7 +7,7 @@ from src.providers.cryptopanic import CryptoPanicClient
 from src.senders.email_sender import send_email
 from src.summarize import generate_market_analysis
 
-# --- 👇 这里直接植入 HTML 生成逻辑，不再依赖外部文件 👇 ---
+# --- 👇 HTML 生成逻辑 (已优化市值显示) 👇 ---
 def save_to_html(data_map: dict, output_dir: str = "output") -> str:
     """直接在主程序中生成 HTML 报告"""
     if not os.path.exists(output_dir):
@@ -85,10 +85,26 @@ def save_to_html(data_map: dict, output_dir: str = "output") -> str:
                 contents_html += '<tr>'
                 for k, v in item.items():
                     val = str(v)
-                    if "http" in val: val = f"<a href='{val}' target='_blank'>Link</a>"
-                    elif "%" in val and "-" in val: val = f'<span class="tag tag-red">{val}</span>'
-                    elif "%" in val: val = f'<span class="tag tag-green">{val}</span>'
-                    elif k == "amount" and "m" in val.lower(): val = f'<span class="tag tag-blue">{val}</span>'
+                    
+                    # [优化 1] 市值格式化 (Market Cap) -> 转为 M 单位
+                    if k == "market_cap":
+                        try:
+                            # 除以 1,000,000 并保留 2 位小数
+                            val_m = float(v) / 1_000_000
+                            val = f"${val_m:,.2f}M"
+                        except:
+                            val = str(v)
+                    
+                    # [常规格式化]
+                    elif "http" in val: 
+                        val = f"<a href='{val}' target='_blank'>Link</a>"
+                    elif "%" in val and "-" in val: 
+                        val = f'<span class="tag tag-red">{val}</span>'
+                    elif "%" in val: 
+                        val = f'<span class="tag tag-green">{val}</span>'
+                    elif k == "amount" and "m" in val.lower(): 
+                        val = f'<span class="tag tag-blue">{val}</span>'
+                    
                     contents_html += f'<td>{val}</td>'
                 contents_html += '</tr>'
             contents_html += '</tbody></table>'
@@ -119,14 +135,14 @@ def main():
     eco = rd.fetch_ecosystem()
     unl = rd.fetch_token_unlocks()
     
-    # 2. CoinGecko
+    # 2. CoinGecko [优化 2] 抓取前 100 名
     cg = CoinGeckoClient()
-    markets = cg.fetch_market_data(limit=30)
+    markets = cg.fetch_market_data(limit=100)
     
-    # 3. CryptoPanic
+    # 3. CryptoPanic [优化 3] 抓取前 50 条新闻
     cp_key = os.getenv("CRYPTOPANIC_API_KEY", "")
     cp = CryptoPanicClient(api_key=cp_key)
-    news = cp.fetch_hot_news(limit=20)
+    news = cp.fetch_hot_news(limit=50)
     
     print(f"    - 融资:{len(fund)} | 行情:{len(markets)} | 新闻:{len(news)}")
 
@@ -134,7 +150,6 @@ def main():
     summary_html = generate_market_analysis(fund, air, unl, eco, markets, news)
 
     print(">>> [3/4] 生成 HTML 报告附件...")
-    # 直接调用上面的内部函数，不再引用外部文件
     report_path = save_to_html({
         "0.市场行情": markets,
         "1.舆情热点": news,
