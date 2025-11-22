@@ -25,13 +25,14 @@ class CoinGeckoClient:
             return []
 
     def fetch_trending(self) -> List[Dict]:
-        """获取热搜币种 (用于生态板块)"""
+        """获取热搜币种 (已增加到前 20 名)"""
         url = f"{self.base_url}/search/trending"
         try:
             r = requests.get(url, timeout=15)
             r.raise_for_status()
             data = r.json().get("coins", [])
-            return [self._normalize_trending(x['item']) for x in data[:7]] # 取前7个
+            # [修改] 这里改成了 [:20]
+            return [self._normalize_trending(x['item']) for x in data[:20]] 
         except Exception as e:
             print(f"[WARN] CoinGecko 热搜失败: {e}")
             return []
@@ -51,5 +52,5 @@ class CoinGeckoClient:
             "name": item.get("name"),
             "symbol": item.get("symbol"),
             "rank": item.get("market_cap_rank"),
-            "score": item.get("score") + 1 # 排名 0 开始，改为 1
+            "score": item.get("score") + 1
         }
