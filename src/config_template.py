@@ -1,0 +1,54 @@
+DEFAULT_CONFIG_TEMPLATE = {
+    "keywords": ["web3", "defi", "nft", "ethereum", "solana", "layer2", "打新", "预售", "空投"],
+    "since_hours": 24,
+    "date_mode": "last_hours",  # last_hours | yesterday
+    "timezone": "Asia/Shanghai",  # UTC+8
+    "limit": 120,
+    "delivery": {
+        "email": {
+            "enabled": False,
+            "subject": "Web3 日报",
+            "from_name": "Web3 Reporter",
+        },
+        "telegram": {"enabled": True},
+    },
+    "trigger_keywords": [
+        "打新",
+        "预售",
+        "空投",
+        "whitelist",
+        "presale",
+        "airdrop",
+        "IDO",
+        "IEO",
+        "mint",
+        "launch",
+    ],
+    "data_sources": {
+        "rootdata": {
+            "enabled": True,
+            "base_url": "https://api.rootdata.com/open",
+            "auth_header": "x-api-key",
+            "endpoints": {
+                "fundraising": "fundraising_projects",
+                "token_unlocks": "token_unlocks",
+                "airdrops": "airdrops",
+                "ecosystem": "ecosystem_changes",
+            },
+        }
+    },
+    "env": {
+        "OPENAI_API_KEY": "",
+        "OPENAI_MODEL": "gpt-4o-mini",
+        "ROOTDATA_API_KEY": "",
+        "EMAIL_SMTP_HOST": "",
+        "EMAIL_SMTP_PORT": 587,
+        "EMAIL_USERNAME": "",
+        "EMAIL_PASSWORD": "",
+        "EMAIL_TO": "wanghzhepoker@gmail.com",
+        "EMAIL_USE_SSL": False,
+        "TELEGRAM_BOT_TOKEN": "",
+        "TELEGRAM_CHAT_ID": "",
+    },
+    "prompt_extra": "",
+}
